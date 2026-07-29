@@ -392,6 +392,106 @@ python3 /home/user/arh2026/ai/simple_project/mission_scripts/fire_detector.py
 
 ---
 
+## Шаг 7. Миссия ровера: тушение огоньков (если ровер есть в конфиге)
+
+**Этот шаг выполняется только если в конфиге есть секция `rover` и ровер ответил на пинг.**
+
+Ровер забирает воду с водонапорной башни и тушит найденные огоньки.
+
+### Логика миссии:
+
+1. Прочитай `config.json` → секции `rover` и `detected_fires`
+2. Координаты башни: `rover.tower.x`, `rover.tower.y`
+3. Огоньки: `detected_fires` (массив с `x`, `y`)
+
+**Алгоритм движения ровера:**
+
+```
+Ровер едет к башне → сигналы → ждать 5с
+  ↓
+Для каждого огонька (по порядку):
+  Ровер едет к огоньку  →  Ровер едет к башне → сигналы → ждать 5с
+  ↓
+Если огоньков нет:
+  Ровер едет к башне → сигналы → ждать 5с
+```
+
+Запусти **один Task-агент** типа `general`. Передай ему это задание:
+
+```
+Ты управляешь наземным ровером. Твоя задача — миссия тушения огоньков.
+Команды лежат в /home/user/arh2026/ai/simple_project/drone_comand/
+
+=== ИСХОДНЫЕ ДАННЫЕ ===
+
+Прочитай /home/user/arh2026/ai/simple_project/config.json и извлеки:
+  - rover.ip → ROVER_IP
+  - rover.script_path → MOVE_SCRIPT
+  - rover.signal_script_path → SIGNAL_SCRIPT
+  - rover.tower → TOWER_X, TOWER_Y
+  - detected_fires → массив огоньков (если секции нет — значит 0 огоньков)
+
+=== ШАГ 1: ДВИЖЕНИЕ К БАШНЕ ===
+
+Выполни:
+  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} {TOWER_X} {TOWER_Y} --script-path {MOVE_SCRIPT}
+
+Если ошибка → верни "Ровер: ОШИБКА движения к башне ({TOWER_X}, {TOWER_Y}). Миссия ровера прервана."
+Больше ничего не делай.
+
+=== ШАГ 2: СИГНАЛЫ У БАШНИ ===
+
+Выполни:
+  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_signal.py {ROVER_IP} --script-path {SIGNAL_SCRIPT}
+
+Если ошибка → запиши "[WARN] сигналы не включились", но ПРОДОЛЖАЙ.
+
+Выполни:
+  sleep 5
+
+=== ШАГ 3: ЦИКЛ ТУШЕНИЯ ОГОНЬКОВ ===
+
+ЕСЛИ detected_fires пуст или отсутствует:
+  Верни "Ровер: 0 огоньков. Башня посещена, сигналы активированы. OK."
+
+ЕСЛИ есть огоньки — для каждого fire из detected_fires по порядку:
+
+  3a. Движение к огоньку:
+    python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} {FIRE_X} {FIRE_Y} --script-path {MOVE_SCRIPT}
+
+    Если ошибка → запиши "[WARN] не доехал до огонька ({FIRE_X}, {FIRE_Y})" и ПРОДОЛЖАЙ к следующему.
+
+  3b. Возврат к башне:
+    python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} {TOWER_X} {TOWER_Y} --script-path {MOVE_SCRIPT}
+
+    Если ошибка → запиши "[WARN] не вернулся к башне" и ПРОДОЛЖАЙ.
+
+  3c. Сигналы:
+    python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_signal.py {ROVER_IP} --script-path {SIGNAL_SCRIPT}
+
+    sleep 5
+
+=== ШАГ 4: ВЕРНИ РЕЗУЛЬТАТ ===
+
+Верни одной строкой:
+  РЕЗУЛЬТАТ ТУШЕНИЯ: огоньков всего={M}, обработано={K}. Статус: OK | PARTIAL (часть огоньков не обработана).
+  Если были предупреждения — перечисли их.
+```
+
+**Не падай если ровер не справился — это нормально.** Просто зафиксируй результат.
+
+После завершения дополни финальный отчёт:
+
+```
+Тушение огоньков (ровер):
+  Башня: ({x}, {y})
+  Огоньков: {M}
+  Обработано: {K}
+  Статус: OK
+```
+
+---
+
 ## Обработка ошибок — НИКОГДА НЕ ПАДАЙ
 
 | Ситуация | Действие |

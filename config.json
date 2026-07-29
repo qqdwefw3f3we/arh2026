@@ -1,9 +1,15 @@
 {
   "drones": [
-    {"id": 1, "ip": "192.168.1.110", "role": "survey"},
+    {"id": 1, "ip": "192.168.1.116", "role": "survey"},
     {"id": 2, "ip": "192.168.1.111", "role": "takeoff_land"}
 
   ],
+  "rover": {
+    "ip": "192.168.1.200",
+    "script_path": "/home/sverk/rover_control/move.py",
+    "signal_script_path": "/home/sverk/rover_control/signal.py",
+    "tower": {"x": 0.0, "y": 0.0}
+  },
   "flight": {
     "altitude": 2,
     "grid": "4x4",
