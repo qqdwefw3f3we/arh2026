@@ -66,7 +66,7 @@ def generate_cells(N, cell_size):
             x_values = [-offset + j * cell_size for j in range(N - 1, -1, -1)]
         for j, x in enumerate(x_values):
             y = -offset + i * cell_size
-            cells.append((round(x, 2), round(y, 2), f"cell_{i}_{j}.jpg"))
+            cells.append((round(x, 2), round(y, 2), f"cell_{i}_{j}__x{round(x,2)}_y{round(y,2)}.jpg"))
     return cells
 
 
