@@ -1,0 +1,13 @@
+{
+  "drones": [
+    {"id": 1, "ip": "192.168.1.110", "role": "survey"},
+    {"id": 2, "ip": "192.168.1.111", "role": "takeoff_land"}
+
+  ],
+  "flight": {
+    "altitude": 2,
+    "grid": "4x4",
+    "cell_size": 0.8,
+    "traverse": "snake"
+  }
+}
