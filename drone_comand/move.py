@@ -21,7 +21,7 @@ if not all([DRONE_IP, X, Y]):
 PYTHON_SCRIPT = f"""
 import sverk_interfaces
 d = sverk_interfaces.init(Nodename='cli_move')
-d.control.navigate_wait(x={X}, y={Y}, z={ALT}, yaw=0.0, speed=0.5, frame_id='aruco_map', auto_arm=False, timeout=30, tolerance=0.3)
+d.control.navigate_wait(x={X}, y={Y}, z={ALT}, yaw=0.0, speed=0.5, frame_id='aruco_map', auto_arm=True, timeout=30, tolerance=0.3)
 print('MOVE: reached ({X}, {Y}, {ALT}m) in aruco_map')
 """
 
@@ -29,7 +29,7 @@ SSH_CMD = "source /opt/ros/humble/setup.bash && source /home/sverk/sverk_ws/inst
 
 print(f"[move] drone={DRONE_IP} target=({X}, {Y}) alt={ALT}m")
 r = subprocess.run(
-    ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
+    ["sshpass", "-p", "sverk", "ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
      "-o", "UserKnownHostsFile=/dev/null",
      f"sverk@{DRONE_IP}", "-p", "22", SSH_CMD],
     input=PYTHON_SCRIPT, text=True, capture_output=True, timeout=45

@@ -26,7 +26,7 @@ SSH_CMD = "source /opt/ros/humble/setup.bash && source /home/sverk/sverk_ws/inst
 
 print(f"[land] drone={DRONE_IP}")
 r = subprocess.run(
-    ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
+    ["sshpass", "-p", "sverk", "ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
      "-o", "UserKnownHostsFile=/dev/null",
      f"sverk@{DRONE_IP}", "-p", "22", SSH_CMD],
     input=PYTHON_SCRIPT, text=True, capture_output=True, timeout=30
