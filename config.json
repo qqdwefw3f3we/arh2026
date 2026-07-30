@@ -1,14 +1,14 @@
 {
   "drones": [
-    {"id": 1, "ip": "192.168.1.116", "role": "survey"},
-    {"id": 2, "ip": "192.168.1.111", "role": "takeoff_land"}
+    {"id": 1, "ip": "192.168.1.1161", "role": "survey"},
+    {"id": 2, "ip": "192.168.1.1111", "role": "takeoff_land"}
 
   ],
   "rover": {
-    "ip": "192.168.1.200",
-    "script_path": "/home/sverk/rover_control/move.py",
-    "signal_script_path": "/home/sverk/rover_control/signal.py",
-    "tower": {"x": 0.0, "y": 0.0}
+    "ip": "192.168.1.201",
+    "tower": {"x": 0.0, "y": 0.0},
+    "init_cell": {"col": 1, "row": 1},
+    "grid": "6x6"
   },
   "flight": {
     "altitude": 2,

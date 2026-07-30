@@ -20,7 +20,7 @@
 - Если в конфиге **нет дрона с role: "survey"** — назначь первого дрона survey.
 - Каждый дрон имеет поля: `id`, `ip`, `role`.
 - Из `flight` бери: `altitude`, `grid` (извлеки N из строки `"NxN"`, например `"4x4"` → N=4), `cell_size`, `traverse`.
-- Секция `rover` (если есть): содержит `ip`, `script_path` — путь к скрипту движения на самом ровере.
+- Секция `rover` (если есть): содержит `ip` (192.168.1.201), `tower` (координаты башни), `init_cell` (начальная клетка), `grid` (размер сетки ровера `"6x6"`). Управление ровером — через HTTP API (порт 8767) командой `goal-cell`.
 
 ---
 
@@ -272,6 +272,14 @@ cell_0_1: x=-0.4 y=-1.2 → cell_0_1__x-0.4_y-1.2.jpg
 
 ### 3D. Сформируй задание для rover-агента (если ровер есть в конфиге)
 
+**Задача ровера:** проехать из начальной клетки (1, 1) в клетку (1, 2) и вернуться обратно в (1, 1).
+Этот агент **запускается параллельно с дронами** в Шаге 4.
+
+Ровер управляется через HTTP API по клеткам сетки 6×6 (1..6). Скрипт `rover_move.py` принимает drone-координаты и сам переводит их в rover-клетки:
+  rover_col = round((drone_x + 2.0) * 5 / 4) + 1
+  rover_row = round((drone_y + 2.0) * 5 / 4) + 1
+Границы: drone (-2,-2) → rover (1,1), drone (2,2) → rover (6,6).
+
 Для ровера скопируй шаблон:
 
 ```
@@ -280,28 +288,36 @@ cell_0_1: x=-0.4 y=-1.2 → cell_0_1__x-0.4_y-1.2.jpg
 
 Выполняй строго по шагам. Не пропускай. Если команда вернула ненулевой код — это ошибка.
 
-=== ШАГ 1: ДВИЖЕНИЕ В ТОЧКУ (-2, -1.2) ===
+=== ШАГ 1: ИНИЦИАЛИЗАЦИЯ ===
 
 Выполни:
-  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} -2 -1.2 --script-path {SCRIPT_PATH}
+  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_init.py {ROVER_IP} --col {INIT_COL} --row {INIT_ROW}
 
-Если ошибка → верни "Ровер ({ROVER_IP}): ОШИБКА движения в точку (-2, -1.2). Миссия ровера прервана."
+Если ошибка → верни "Ровер ({ROVER_IP}): ОШИБКА инициализации. Миссия ровера прервана."
 Больше ничего не делай.
 
-=== ШАГ 2: ДВИЖЕНИЕ В ТОЧКУ (-2, -2) ===
+=== ШАГ 2: ДВИЖЕНИЕ В КЛЕТКУ (1, 2) ===
 
-Выполни:
-  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} -2 -2 --script-path {SCRIPT_PATH}
+Выполни (drone-координаты -2, -1.2 соответствуют rover-клетке 1, 2):
+  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} -2 -1.2
 
-Если ошибка → верни "Ровер ({ROVER_IP}): ОШИБКА движения в точку (-2, -2). Миссия ровера прервана."
+Если ошибка → верни "Ровер ({ROVER_IP}): ОШИБКА движения в клетку (1, 2). Миссия ровера прервана."
+Больше ничего не делай.
 
-=== ШАГ 3: ВЕРНИ РЕЗУЛЬТАТ ===
+=== ШАГ 3: ВОЗВРАТ В КЛЕТКУ (1, 1) ===
+
+Выполни (drone-координаты -2, -2 соответствуют rover-клетке 1, 1):
+  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} -2 -2
+
+Если ошибка → верни "Ровер ({ROVER_IP}): ОШИБКА возврата в клетку (1, 1). Миссия ровера прервана."
+
+=== ШАГ 4: ВЕРНИ РЕЗУЛЬТАТ ===
 
 Верни одной строкой:
-  РЕЗУЛЬТАТ ROVER ({ROVER_IP}): статус (OK/FAILED), точки: (-2, -1.2), (-2, -2)
+  РЕЗУЛЬТАТ ROVER ({ROVER_IP}): статус (OK/FAILED), маршрут: (1,2) → (1,1)
 ```
 
-Где `{ROVER_IP}` — IP ровера из конфига, `{SCRIPT_PATH}` — путь к скрипту на ровере из `rover.script_path`.
+Где `{ROVER_IP}` — IP ровера из конфига, `{INIT_COL}`, `{INIT_ROW}` — из `rover.init_cell` (по умолчанию 1, 1).
 
 ---
 
@@ -402,18 +418,21 @@ python3 /home/user/arh2026/ai/simple_project/mission_scripts/fire_detector.py
 
 1. Прочитай `config.json` → секции `rover` и `detected_fires`
 2. Координаты башни: `rover.tower.x`, `rover.tower.y`
-3. Огоньки: `detected_fires` (массив с `x`, `y`)
+3. Начальная клетка: `rover.init_cell.col`, `rover.init_cell.row`
+4. Огоньки: `detected_fires` (массив с `x`, `y`)
 
 **Алгоритм движения ровера:**
 
 ```
-Ровер едет к башне → сигналы → ждать 5с
+Инициализация (initial-cell + clear)
+  ↓
+Ровер едет к башне → ждать 5с
   ↓
 Для каждого огонька (по порядку):
-  Ровер едет к огоньку  →  Ровер едет к башне → сигналы → ждать 5с
+  Ровер едет к огоньку  →  Ровер едет к башне → ждать 5с
   ↓
 Если огоньков нет:
-  Ровер едет к башне → сигналы → ждать 5с
+  Ровер едет к башне → ждать 5с
 ```
 
 Запусти **один Task-агент** типа `general`. Передай ему это задание:
@@ -422,29 +441,35 @@ python3 /home/user/arh2026/ai/simple_project/mission_scripts/fire_detector.py
 Ты управляешь наземным ровером. Твоя задача — миссия тушения огоньков.
 Команды лежат в /home/user/arh2026/ai/simple_project/drone_comand/
 
+Ровер управляется по клеткам сетки 6×6 (1..6).
+Скрипт rover_move.py принимает drone-координаты (x, y) и автоматически переводит их в rover-клетки:
+  rover_col = round((drone_x + 2.0) * 5 / 4) + 1
+  rover_row = round((drone_y + 2.0) * 5 / 4) + 1
+Границы: drone(-2,-2) → rover(1,1), drone(2,2) → rover(6,6).
+
 === ИСХОДНЫЕ ДАННЫЕ ===
 
 Прочитай /home/user/arh2026/ai/simple_project/config.json и извлеки:
   - rover.ip → ROVER_IP
-  - rover.script_path → MOVE_SCRIPT
-  - rover.signal_script_path → SIGNAL_SCRIPT
+  - rover.init_cell → INIT_COL, INIT_ROW
   - rover.tower → TOWER_X, TOWER_Y
   - detected_fires → массив огоньков (если секции нет — значит 0 огоньков)
 
-=== ШАГ 1: ДВИЖЕНИЕ К БАШНЕ ===
+=== ШАГ 1: ИНИЦИАЛИЗАЦИЯ ===
 
 Выполни:
-  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} {TOWER_X} {TOWER_Y} --script-path {MOVE_SCRIPT}
+  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_init.py {ROVER_IP} --col {INIT_COL} --row {INIT_ROW}
+
+Если ошибка → верни "Ровер: ОШИБКА инициализации. Миссия ровера прервана."
+Больше ничего не делай.
+
+=== ШАГ 2: ДВИЖЕНИЕ К БАШНЕ ===
+
+Выполни:
+  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} {TOWER_X} {TOWER_Y}
 
 Если ошибка → верни "Ровер: ОШИБКА движения к башне ({TOWER_X}, {TOWER_Y}). Миссия ровера прервана."
 Больше ничего не делай.
-
-=== ШАГ 2: СИГНАЛЫ У БАШНИ ===
-
-Выполни:
-  python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_signal.py {ROVER_IP} --script-path {SIGNAL_SCRIPT}
-
-Если ошибка → запиши "[WARN] сигналы не включились", но ПРОДОЛЖАЙ.
 
 Выполни:
   sleep 5
@@ -452,23 +477,21 @@ python3 /home/user/arh2026/ai/simple_project/mission_scripts/fire_detector.py
 === ШАГ 3: ЦИКЛ ТУШЕНИЯ ОГОНЬКОВ ===
 
 ЕСЛИ detected_fires пуст или отсутствует:
-  Верни "Ровер: 0 огоньков. Башня посещена, сигналы активированы. OK."
+  Верни "Ровер: 0 огоньков. Башня посещена. OK."
 
 ЕСЛИ есть огоньки — для каждого fire из detected_fires по порядку:
 
   3a. Движение к огоньку:
-    python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} {FIRE_X} {FIRE_Y} --script-path {MOVE_SCRIPT}
+    python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} {FIRE_X} {FIRE_Y}
 
     Если ошибка → запиши "[WARN] не доехал до огонька ({FIRE_X}, {FIRE_Y})" и ПРОДОЛЖАЙ к следующему.
 
   3b. Возврат к башне:
-    python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} {TOWER_X} {TOWER_Y} --script-path {MOVE_SCRIPT}
+    python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_move.py {ROVER_IP} {TOWER_X} {TOWER_Y}
 
     Если ошибка → запиши "[WARN] не вернулся к башне" и ПРОДОЛЖАЙ.
 
-  3c. Сигналы:
-    python3 /home/user/arh2026/ai/simple_project/drone_comand/rover_signal.py {ROVER_IP} --script-path {SIGNAL_SCRIPT}
-
+  3c. Ожидание:
     sleep 5
 
 === ШАГ 4: ВЕРНИ РЕЗУЛЬТАТ ===
@@ -505,6 +528,7 @@ python3 /home/user/arh2026/ai/simple_project/mission_scripts/fire_detector.py
 | Агент вернул неожиданную ошибку | Ты **продолжаешь** с остальными агентами. |
 | Ровер не отвечает на пинг | Не запускай rover-агента. Зафиксируй в отчёте — дроны работают независимо. |
 | Ровер не доехал до точки | Rover-агент вернёт ошибку. Зафиксируй в отчёте, дроны продолжают. |
+| Ровер упал или потерял связь | Пропусти ровера в этой фазе. Зафиксируй в отчёте. |
 
 ### Главный принцип:
 

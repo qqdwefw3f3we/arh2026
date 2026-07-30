@@ -1,49 +1,84 @@
 #!/usr/bin/env python3
 """
-Управление наземным ровером: движение в точку (x, y).
-Подключается по SSH к роверу и запускает на нём скрипт движения.
-Использование: python3 rover_move.py <rover-ip> <x> <y> [--script-path <path>]
-Пример:       python3 rover_move.py 192.168.1.200 -2.0 -1.2
+Управление наземным ровером: движение в клетку сетки 6×6.
+Принимает drone-координаты (x, y), переводит в rover-клетку (col, row 1..6)
+и отправляет команду goal-cell через HTTP API.
+
+Формула перевода:
+  rover_col = round((drone_x - DRONE_MIN) / (DRONE_MAX - DRONE_MIN) * (GRID_SIZE - 1)) + 1
+  rover_row = round((drone_y - DRONE_MIN) / (DRONE_MAX - DRONE_MIN) * (GRID_SIZE - 1)) + 1
+  DRONE_MIN = -2.0, DRONE_MAX = 2.0, GRID_SIZE = 6
+  → rover_col = round((drone_x + 2.0) * 5 / 4) + 1
+
+Использование:
+  python3 rover_move.py <rover-ip> <drone-x> <drone-y> [--yaw <angle>]
+Примеры:
+  python3 rover_move.py 192.168.1.201 -2.0 -2.0       # → rover cell (1, 1)
+  python3 rover_move.py 192.168.1.201  2.0  2.0       # → rover cell (6, 6)
+  python3 rover_move.py 192.168.1.201  0.0  0.0 --yaw 90  # → rover cell (3, 3) yaw 90
 """
 
 import subprocess
 import sys
 
-ROVER_IP = sys.argv[1] if len(sys.argv) > 1 else None
-X = sys.argv[2] if len(sys.argv) > 2 else None
-Y = sys.argv[3] if len(sys.argv) > 3 else None
+DRONE_MIN = -2.0
+DRONE_MAX = 2.0
+GRID_SIZE = 6
+ROVER_USER = "pi"
+ROVER_PASSWORD = "raspberry"
 
-script_idx = next((i for i, a in enumerate(sys.argv) if a == "--script-path"), None)
-REMOTE_SCRIPT = sys.argv[script_idx + 1] if script_idx is not None else "/home/sverk/rover_control/move.py"
 
-if not all([ROVER_IP, X, Y]):
-    print("Usage: python3 rover_move.py <rover-ip> <x> <y> [--script-path <path>]")
-    print("Example: python3 rover_move.py 192.168.1.200 -2.0 -1.2")
-    sys.exit(1)
+def drone_to_rover_cell(drone_x, drone_y):
+    """Перевод drone-координат (x, y) в rover-клетку (col, row 1..6)."""
+    col = round((drone_x - DRONE_MIN) / (DRONE_MAX - DRONE_MIN) * (GRID_SIZE - 1)) + 1
+    row = round((drone_y - DRONE_MIN) / (DRONE_MAX - DRONE_MIN) * (GRID_SIZE - 1)) + 1
+    col = max(1, min(GRID_SIZE, col))
+    row = max(1, min(GRID_SIZE, row))
+    return col, row
 
-PYTHON_SCRIPT = f"""
-import sys
-sys.path.insert(0, '/home/sverk/rover_control')
-import move
-move.move_to({X}, {Y})
-"""
-# TODO: заменить на реальный скрипт ровера, когда будет готов
-# PYTHON_SCRIPT = f"""
-# exec(open('{REMOTE_SCRIPT}').read())
-# move_to({X}, {Y})
-# """
 
-SSH_CMD = "python3"
+def main():
+    if len(sys.argv) < 4:
+        print("Usage: python3 rover_move.py <rover-ip> <drone-x> <drone-y> [--yaw <angle>]")
+        print("Example: python3 rover_move.py 192.168.1.201 -2.0 -2.0")
+        print("         python3 rover_move.py 192.168.1.201  2.0  2.0 --yaw 90")
+        sys.exit(1)
 
-print(f"[rover] ip={ROVER_IP} target=({X}, {Y})")
-r = subprocess.run(
-    ["sshpass", "-p", "sverk", "ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5",
-     "-o", "UserKnownHostsFile=/dev/null",
-     f"sverk@{ROVER_IP}", "-p", "22", SSH_CMD],
-    input=PYTHON_SCRIPT, text=True, capture_output=True, timeout=30
-)
+    rover_ip = sys.argv[1]
+    drone_x = float(sys.argv[2])
+    drone_y = float(sys.argv[3])
 
-print(r.stdout)
-if r.stderr:
-    print(r.stderr, file=sys.stderr)
-sys.exit(r.returncode)
+    yaw = 0
+    yaw_idx = next((i for i, a in enumerate(sys.argv) if a == "--yaw"), None)
+    if yaw_idx is not None and yaw_idx + 1 < len(sys.argv):
+        yaw = int(sys.argv[yaw_idx + 1])
+
+    col, row = drone_to_rover_cell(drone_x, drone_y)
+    url = f"http://{rover_ip}:8767"
+    client = "tools/rover_control_client.py"
+
+    print(f"[rover] ip={rover_ip} drone=({drone_x}, {drone_y}) → rover_cell=({col}, {row}) yaw={yaw}")
+
+    remote_cmd = (
+        f"cd ~/sverk_rover && "
+        f"source install/setup.zsh 2>/dev/null; "
+        f"python3 \"{client}\" --url \"{url}\" goal-cell {col} {row} --yaw {yaw} --replace"
+    )
+
+    r = subprocess.run(
+        ["sshpass", "-p", ROVER_PASSWORD, "ssh",
+         "-o", "StrictHostKeyChecking=no",
+         "-o", "ConnectTimeout=5",
+         "-o", "UserKnownHostsFile=/dev/null",
+         f"{ROVER_USER}@{rover_ip}", "-p", "22", remote_cmd],
+        capture_output=True, text=True, timeout=60
+    )
+
+    print(r.stdout)
+    if r.stderr:
+        print(r.stderr, file=sys.stderr)
+    sys.exit(r.returncode)
+
+
+if __name__ == "__main__":
+    main()
